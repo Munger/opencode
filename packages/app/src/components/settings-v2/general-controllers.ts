@@ -3,7 +3,6 @@ import type { ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { usePermission } from "@/context/permission"
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
 import {
   monoDefault,
   monoFontFamily,
@@ -17,6 +16,7 @@ import {
   useSettings,
 } from "@/context/settings"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
+import { useServerSync } from "@/context/server-sync"
 import { createSoundPreviewController, type ShellOption } from "./general-controller-behavior"
 
 export { createShellOptions, createSoundPreviewController } from "./general-controller-behavior"
@@ -76,9 +76,7 @@ export function createAppearanceSettingsController() {
   const settings = useSettings()
   const theme = useTheme()
   const themes = createMemo(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
-
   onMount(() => void theme.loadThemes())
-
   return {
     scheme: {
       current: theme.colorScheme,
@@ -144,7 +142,6 @@ export function createSoundSettingsController() {
       preview.play(option.id)
     },
   })
-
   return {
     agent: channel(
       settings.sounds.agentEnabled,
@@ -166,7 +163,6 @@ export function createSoundSettingsController() {
     ),
   }
 }
-
 export type PermissionScopeController = ReturnType<typeof createPermissionScopeController>
 export type ShellSettingsController = ReturnType<typeof createShellSettingsController>
 export type AppearanceSettingsController = ReturnType<typeof createAppearanceSettingsController>
