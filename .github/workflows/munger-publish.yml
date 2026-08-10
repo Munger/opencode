@@ -1,0 +1,209 @@
+#
+# munger-publish.yml : Build and publish MungerWare fork of opencode
+#
+# Copyright (c) 2026 Tim Hosking
+# Email: tim@mungerware.com
+# Website: https://github.com/Munger
+# Licence: MIT
+#
+# Triggers on release published (tag must already exist). Builds the Linux
+# .deb (raw dpkg-deb tree) and the darwin-arm64 binary via build.ts --single,
+# both with the version taken from the release tag. Verifies the .deb Version
+# field and the binary's own --version output both match the tag before the
+# artifacts are attached to the release. The .deb is then pushed to the
+# MungerWare/apt-packages apt repo (pool/main/o/opencode), which regenerates the
+# dists indexes and serves apt.mungerware.com, and the Homebrew formula is
+# pushed to MungerWare/homebrew-packages with the binary's sha256, serving
+# taps.mungerware.com. Both pushes use SSH deploy keys.
+
+name: MungerWare Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux-deb:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}"
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build opencode binary (single, current platform)
+        run: |
+          OPENCODE_VERSION=${{ steps.version.outputs.version }} \
+            bun run packages/opencode/script/build.ts --single
+        env:
+          OPENCODE_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Verify binary --version matches tag
+        run: |
+          BINARY_VERSION="$($PWD/packages/opencode/dist/opencode-linux-x64/bin/opencode --version)"
+          echo "Binary version: ${BINARY_VERSION}"
+          if [ "$BINARY_VERSION" != "${{ steps.version.outputs.version }}" ]; then
+            echo "ERROR: binary --version (${BINARY_VERSION}) does not match tag version (${{ steps.version.outputs.version }})"
+            exit 1
+          fi
+          echo "Binary version verified: ${BINARY_VERSION}"
+
+      - name: Assemble dpkg tree
+        run: |
+          PKGDIR="pkg/opencode"
+          mkdir -p "$PKGDIR/DEBIAN" "$PKGDIR/usr/bin"
+          cp packages/opencode/dist/opencode-linux-x64/bin/opencode "$PKGDIR/usr/bin/opencode"
+          chmod 0755 "$PKGDIR/usr/bin/opencode"
+          cat > "$PKGDIR/DEBIAN/control" <<EOF
+          Package: opencode
+          Version: ${{ steps.version.outputs.version }}
+          Architecture: amd64
+          Section: admin
+          Priority: optional
+          Maintainer: Tim Hosking <munger@mungerware.com>
+          Description: MungerWare-packaged opencode, the open source AI coding agent
+           Fork of https://github.com/anomalyco/opencode distributed via
+           apt.mungerware.com. Includes the mDNS multi-interface fix.
+          EOF
+          cat > "$PKGDIR/DEBIAN/copyright" <<EOF
+          Copyright (c) 2026 Tim Hosking (MungerWare) and opencode contributors.
+          Licence: MIT
+          Upstream: https://github.com/anomalyco/opencode
+          EOF
+
+      - name: Build .deb
+        run: |
+          dpkg-deb --build --root-owner-group pkg/opencode \
+            "opencode_${{ steps.version.outputs.version }}_amd64.deb"
+
+      - name: Verify .deb Version matches tag
+        run: |
+          DEB_VERSION="$(dpkg-deb -f "opencode_${{ steps.version.outputs.version }}_amd64.deb" Version)"
+          echo "Deb Version: ${DEB_VERSION}"
+          if [ "$DEB_VERSION" != "${{ steps.version.outputs.version }}" ]; then
+            echo "ERROR: .deb Version (${DEB_VERSION}) does not match tag version (${{ steps.version.outputs.version }})"
+            exit 1
+          fi
+          echo "Deb version verified: ${DEB_VERSION}"
+
+      - name: Attach .deb to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "opencode_${{ steps.version.outputs.version }}_amd64.deb"
+
+      - name: Push .deb to APT repository
+        env:
+          PACKAGES_KEY: ${{ secrets.PACKAGES_REPO_TOKEN }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$PACKAGES_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git clone --quiet git@github.com:MungerWare/apt-packages.git apt-repo
+          DEST="apt-repo/pool/main/o/opencode"
+          mkdir -p "$DEST"
+          cp "opencode_${{ steps.version.outputs.version }}_amd64.deb" "$DEST/"
+          cd apt-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "Add opencode ${{ steps.version.outputs.version }}"
+          git push
+
+  build-darwin-arm64:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}"
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build opencode binary (single, darwin arm64)
+        run: |
+          OPENCODE_VERSION=${{ steps.version.outputs.version }} \
+            bun run packages/opencode/script/build.ts --single
+        env:
+          OPENCODE_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Verify binary --version matches tag
+        run: |
+          BINARY_VERSION="$(packages/opencode/dist/opencode-darwin-arm64/bin/opencode --version)"
+          echo "Binary version: ${BINARY_VERSION}"
+          if [ "$BINARY_VERSION" != "${{ steps.version.outputs.version }}" ]; then
+            echo "ERROR: binary --version (${BINARY_VERSION}) does not match tag version (${{ steps.version.outputs.version }})"
+            exit 1
+          fi
+          echo "Binary version verified: ${BINARY_VERSION}"
+
+      - name: Attach binary to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp packages/opencode/dist/opencode-darwin-arm64/bin/opencode opencode-darwin-arm64
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "opencode-darwin-arm64"
+
+      - name: Push Homebrew formula
+        env:
+          TAP_KEY: ${{ secrets.TAP_REPO_TOKEN }}
+        run: |
+          BINARY="packages/opencode/dist/opencode-darwin-arm64/bin/opencode"
+          SHA256="$(shasum -a 256 "$BINARY" | awk '{print $1}')"
+          mkdir -p ~/.ssh
+          echo "$TAP_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git clone --quiet git@github.com:MungerWare/homebrew-packages.git tap
+          mkdir -p tap/Formula
+          cat > tap/Formula/opencode.rb <<EOF
+          # Homebrew formula for the MungerWare-packaged opencode binary.
+          class Opencode < Formula
+            desc "MungerWare-packaged opencode, the open source AI coding agent"
+            homepage "https://github.com/Munger/opencode"
+            url "https://github.com/Munger/opencode/releases/download/${{ github.event.release.tag_name }}/opencode-darwin-arm64"
+            version "${{ steps.version.outputs.version }}"
+            sha256 "$SHA256"
+            license "MIT"
+
+            def install
+              bin.install "opencode-darwin-arm64" => "opencode"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/opencode --version")
+            end
+          end
+          EOF
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "opencode: add ${{ steps.version.outputs.version }}"
+          git push
