@@ -1,0 +1,92 @@
+#
+# sync-upstream.yml : Rebase Munger/opencode dev onto anomalyco/opencode upstream
+#
+# Copyright (c) 2026 Tim Hosking
+# Email: tim@mungerware.com
+# Website: https://github.com/Munger
+# Licence: MIT
+#
+# Runs daily (and on manual dispatch). Fetches anomalyco/opencode dev, rebases
+# the MungerWare commits (mDNS fix, fork README, publish workflow) onto the new
+# upstream head, and force-pushes the result to origin/dev. If the rebase hits a
+# conflict (upstream changed the same files), it aborts, leaves origin/dev
+# untouched, and files a GitHub issue describing the conflict so a human can
+# resolve it. GITHUB_TOKEN pushes do not retrigger workflows, so this never
+# loops.
+
+name: sync-upstream
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/anomalyco/opencode.git
+
+      - name: Fetch upstream
+        run: git fetch upstream dev
+
+      - name: Rebase MungerWare commits onto upstream dev
+        id: rebase
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B dev origin/dev
+          if git merge-base --is-ancestor upstream/dev HEAD; then
+            echo "Already up to date with upstream dev"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Rebasing onto upstream $(git rev-parse --short upstream/dev)"
+          if ! git rebase upstream/dev; then
+            echo "REBASE_CONFLICT" >&2
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            echo "conflicted_files=$(git diff --name-only --diff-filter=U | tr '\n' ',')" >> "$GITHUB_OUTPUT"
+            git rebase --abort
+            exit 1
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Force-push rebased dev
+        if: steps.rebase.outputs.changed == 'true'
+        run: |
+          git push --force-with-lease=dev:$(git rev-parse origin/dev) origin dev
+
+      - name: File issue on conflict
+        if: steps.rebase.outputs.changed == 'false' && steps.rebase.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo Munger/opencode \
+            --title "Sync conflict: upstream rebase failed" \
+            --body "The daily rebase of Munger/opencode dev onto anomalyco/opencode dev failed.
+
+Conflicted files: ${{ steps.rebase.outputs.conflicted_files }}
+
+origin/dev was left untouched. Resolve manually:
+
+\`\`\`bash
+git clone https://github.com/Munger/opencode.git
+cd opencode
+git remote add upstream https://github.com/anomalyco/opencode.git
+git fetch upstream dev
+git checkout -B dev origin/dev
+git rebase upstream/dev
+# resolve conflicts, then:
+git push --force-with-lease=dev:origin/dev origin dev
+\`\`\`"
