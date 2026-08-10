@@ -1,0 +1,39 @@
+#
+# lint-workflows.yml : actionlint on MungerWare-owned workflows
+#
+# Copyright (c) 2026 Tim Hosking
+# Email: tim@mungerware.com
+# Website: https://github.com/Munger
+# Licence: MIT
+#
+# Runs actionlint on the MungerWare-owned workflows only. Upstream
+# anomalyco/opencode workflows are intentionally excluded — they use custom
+# blacksmith runner labels and disabled jobs that actionlint flags but are
+# correct for their environment. Our own workflows must stay clean.
+
+name: lint-workflows
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - ".github/workflows/munger-publish.yml"
+      - ".github/workflows/sync-upstream.yml"
+      - ".github/workflows/lint-workflows.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/munger-publish.yml"
+      - ".github/workflows/sync-upstream.yml"
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Lint MungerWare workflows
+        uses: raven-actions/actionlint@v2
+        with:
+          files: |
+            .github/workflows/munger-publish.yml
+            .github/workflows/sync-upstream.yml
