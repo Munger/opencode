@@ -6,19 +6,20 @@
 # Website: https://github.com/Munger
 # Licence: MIT
 #
-# Runs daily (and on manual dispatch). Fetches anomalyco/opencode dev, rebases
-# the MungerWare commits (mDNS fix, fork README, publish workflow) onto the new
-# upstream head, and force-pushes the result to origin/dev. If the rebase hits a
-# conflict (upstream changed the same files), it aborts, leaves origin/dev
-# untouched, and files a GitHub issue describing the conflict so a human can
-# resolve it. GITHUB_TOKEN pushes do not retrigger workflows, so this never
-# loops.
+# Runs daily at 01:00 UTC (00:00 UTC = 01:00 BST, ~2h before the mirror sync
+# systemd timer at 03:00 BST) and on manual dispatch. Fetches anomalyco/opencode
+# dev, rebases the MungerWare commits (mDNS fix, fork README, publish workflow)
+# onto the new upstream head, and force-pushes the result to origin/dev. If the
+# rebase hits a conflict (upstream changed the same files), it aborts, leaves
+# origin/dev untouched, and files a GitHub issue describing the conflict so a
+# human can resolve it. GITHUB_TOKEN pushes do not retrigger workflows, so this
+# never loops. Note: Actions cron is fixed UTC and does not follow BST/GMT.
 
 name: sync-upstream
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:
