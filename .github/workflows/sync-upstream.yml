@@ -77,17 +77,17 @@ jobs:
             --title "Sync conflict: upstream rebase failed" \
             --body "The daily rebase of Munger/opencode dev onto anomalyco/opencode dev failed.
 
-Conflicted files: ${{ steps.rebase.outputs.conflicted_files }}
+            Conflicted files: ${{ steps.rebase.outputs.conflicted_files }}
 
-origin/dev was left untouched. Resolve manually:
+            origin/dev was left untouched. Resolve manually:
 
-\`\`\`bash
-git clone https://github.com/Munger/opencode.git
-cd opencode
-git remote add upstream https://github.com/anomalyco/opencode.git
-git fetch upstream dev
-git checkout -B dev origin/dev
-git rebase upstream/dev
-# resolve conflicts, then:
-git push --force-with-lease=dev:origin/dev origin dev
-\`\`\`"
+            \`\`\`bash
+            git clone https://github.com/Munger/opencode.git
+            cd opencode
+            git remote add upstream https://github.com/anomalyco/opencode.git
+            git fetch upstream dev
+            git checkout -B dev origin/dev
+            git rebase upstream/dev
+            # resolve conflicts, then:
+            git push --force-with-lease=dev:origin/dev origin dev
+            \`\`\`"
