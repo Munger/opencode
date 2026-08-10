@@ -27,13 +27,8 @@ on:
 
 jobs:
   actionlint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Lint MungerWare workflows
-        uses: raven-actions/actionlint@v2
-        with:
-          files: |
-            .github/workflows/munger-publish.yml
-            .github/workflows/sync-upstream.yml
+    uses: MungerWare/actions/.github/workflows/actionlint.yml@main
+    with:
+      files: |
+        .github/workflows/munger-publish.yml
+        .github/workflows/sync-upstream.yml
