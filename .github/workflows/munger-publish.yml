@@ -54,7 +54,7 @@ jobs:
 
       - name: Verify binary --version matches tag
         run: |
-          BINARY_VERSION="$($PWD/packages/opencode/dist/opencode-linux-x64/bin/opencode --version)"
+          BINARY_VERSION="$("$PWD/packages/opencode/dist/opencode-linux-x64/bin/opencode" --version)"
           echo "Binary version: ${BINARY_VERSION}"
           if [ "$BINARY_VERSION" != "${{ steps.version.outputs.version }}" ]; then
             echo "ERROR: binary --version (${BINARY_VERSION}) does not match tag version (${{ steps.version.outputs.version }})"
