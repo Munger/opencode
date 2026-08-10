@@ -14,7 +14,8 @@
 # MungerWare/apt-packages apt repo (pool/main/o/opencode), which regenerates the
 # dists indexes and serves apt.mungerware.com, and the Homebrew formula is
 # pushed to MungerWare/homebrew-packages with the binary's sha256, serving
-# taps.mungerware.com. Both pushes use SSH deploy keys.
+# taps.mungerware.com. Both pushes authenticate with fine-grained PATs
+# (PACKAGES_REPO_TOKEN / TAP_REPO_TOKEN) over HTTPS.
 
 name: MungerWare Publish
 
@@ -110,11 +111,7 @@ jobs:
         env:
           PACKAGES_KEY: ${{ secrets.PACKAGES_REPO_TOKEN }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$PACKAGES_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
-          git clone --quiet git@github.com:MungerWare/apt-packages.git apt-repo
+          git clone --quiet "https://x-access-token:${PACKAGES_KEY}@github.com/MungerWare/apt-packages.git" apt-repo
           DEST="apt-repo/pool/main/o/opencode"
           mkdir -p "$DEST"
           cp "opencode_${{ steps.version.outputs.version }}_amd64.deb" "$DEST/"
@@ -175,11 +172,7 @@ jobs:
         run: |
           BINARY="packages/opencode/dist/opencode-darwin-arm64/bin/opencode"
           SHA256="$(shasum -a 256 "$BINARY" | awk '{print $1}')"
-          mkdir -p ~/.ssh
-          echo "$TAP_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
-          git clone --quiet git@github.com:MungerWare/homebrew-packages.git tap
+          git clone --quiet "https://x-access-token:${TAP_KEY}@github.com/MungerWare/homebrew-packages.git" tap
           mkdir -p tap/Formula
           cat > tap/Formula/opencode.rb <<EOF
           # Homebrew formula for the MungerWare-packaged opencode binary.
