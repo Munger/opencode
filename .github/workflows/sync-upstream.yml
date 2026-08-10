@@ -51,15 +51,19 @@ jobs:
           git checkout -B dev origin/dev
           if git merge-base --is-ancestor upstream/dev HEAD; then
             echo "Already up to date with upstream dev"
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "changed=false"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "Rebasing onto upstream $(git rev-parse --short upstream/dev)"
           if ! git rebase upstream/dev; then
             echo "REBASE_CONFLICT" >&2
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "conflict=true" >> "$GITHUB_OUTPUT"
-            echo "conflicted_files=$(git diff --name-only --diff-filter=U | tr '\n' ',')" >> "$GITHUB_OUTPUT"
+            {
+              echo "changed=false"
+              echo "conflict=true"
+              echo "conflicted_files=$(git diff --name-only --diff-filter=U | tr '\n' ',')"
+            } >> "$GITHUB_OUTPUT"
             git rebase --abort
             exit 1
           fi
@@ -68,7 +72,8 @@ jobs:
       - name: Force-push rebased dev
         if: steps.rebase.outputs.changed == 'true'
         run: |
-          git push --force-with-lease=dev:$(git rev-parse origin/dev) origin dev
+          EXPECTED_DEV_SHA=$(git rev-parse origin/dev)
+          git push --force-with-lease="dev:${EXPECTED_DEV_SHA}" origin dev
 
       - name: Cut fork releases for new upstream versions
         if: steps.rebase.outputs.conflict != 'true'
