@@ -43,6 +43,45 @@
 
 ---
 
+## MungerWare fork
+
+This is a fork of [OpenCode](https://github.com/anomalyco/opencode) maintained by
+MungerWare. It tracks upstream, with these differences:
+
+- **mDNS fix** — advertises each network interface's own address only, instead
+  of leaking every interface's address (including isolated/DMZ segments) into
+  every announcement.
+- **Distribution** — shipped via the MungerWare APT and Homebrew repositories,
+  under the `-mw.N` version scheme, rather than upstream's npm/brew channels.
+
+To install this fork:
+
+**Install on Linux (APT):**
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+sudo curl -fsSL https://apt.mungerware.com/key.asc -o /etc/apt/keyrings/mungerware.asc
+sudo tee /etc/apt/sources.list.d/mungerware.sources > /dev/null <<'EOF'
+# Mungerware personal package repository.
+# Signing key fetched from https://apt.mungerware.com/key.asc
+Types: deb
+URIs: https://apt.mungerware.com
+Suites: resolute
+Components: main
+Signed-By: /etc/apt/keyrings/mungerware.asc
+EOF
+sudo apt update && sudo apt install opencode
+```
+
+**Install on macOS (Homebrew):**
+
+```bash
+brew tap MungerWare/packages
+brew install opencode
+```
+
+---
+
 ### Installation
 
 ```bash
