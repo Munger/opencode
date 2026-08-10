@@ -12,8 +12,11 @@
 # onto the new upstream head, and force-pushes the result to origin/dev. If the
 # rebase hits a conflict (upstream changed the same files), it aborts, leaves
 # origin/dev untouched, and files a GitHub issue describing the conflict so a
-# human can resolve it. GITHUB_TOKEN pushes do not retrigger workflows, so this
-# never loops. Note: Actions cron is fixed UTC and does not follow BST/GMT.
+# human can resolve it. After a clean rebase it also cuts a vX.Y.Z-mw.1 fork
+# release for any upstream vX.Y.Z release not yet mirrored, using RELEASE_TOKEN
+# (GITHUB_TOKEN-created releases do not trigger the publish workflow).
+# GITHUB_TOKEN pushes do not retrigger workflows, so this never loops.
+# Note: Actions cron is fixed UTC and does not follow BST/GMT.
 
 name: sync-upstream
 
@@ -30,7 +33,7 @@ jobs:
   rebase:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -66,6 +69,38 @@ jobs:
         if: steps.rebase.outputs.changed == 'true'
         run: |
           git push --force-with-lease=dev:$(git rev-parse origin/dev) origin dev
+
+      - name: Cut fork releases for new upstream versions
+        if: steps.rebase.outputs.conflict != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          git fetch upstream --tags
+          # Latest upstream release tag (e.g. v1.18.16), and how far behind our
+          # latest -mw.1 release is.
+          UPSTREAM_TAGS=$(gh release list --repo anomalyco/opencode --limit 10 --json tagName --jq '.[].tagName')
+          OUR_TAGS=$(gh release list --repo Munger/opencode --limit 10 --json tagName --jq '.[].tagName')
+          CUT=0
+          for tag in $UPSTREAM_TAGS; do
+            mw="${tag}-mw.1"
+            if echo "$OUR_TAGS" | grep -qx "$mw"; then
+              echo "$mw already released"
+              continue
+            fi
+            if [ "$CUT" -ge 1 ]; then
+              echo "Cutting one release per sync run; $mw deferred to next run"
+              break
+            fi
+            echo "Cutting $mw for upstream $tag"
+            VERSION="${tag#v}"
+            git tag -a "$mw" -m "MungerWare build of opencode $VERSION with the mDNS multi-interface fix."
+            git push origin "$mw"
+            gh release create "$mw" \
+              --repo Munger/opencode \
+              --title "$mw" \
+              --notes "MungerWare build of opencode $VERSION with the mDNS multi-interface fix."
+            CUT=1
+          done
 
       - name: File issue on conflict
         if: steps.rebase.outputs.changed == 'false' && steps.rebase.outputs.conflict == 'true'
